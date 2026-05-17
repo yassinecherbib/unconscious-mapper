@@ -56,14 +56,36 @@ function ConfidenceBar({ value }: { value: number }) {
   );
 }
 
+function EgoStrengthGauge({ score }: { score: number }) {
+  // score: 1-10
+  const pct = (score / 10) * 100;
+  const color = score <= 3 ? "#f87171" : score <= 6 ? "#fbbf24" : "#86efac";
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{
+        flex: 1, height: 6, borderRadius: 3,
+        background: "rgba(255,255,255,0.06)",
+        position: "relative", overflow: "hidden",
+      }}>
+        <div style={{
+          position: "absolute", left: 0, top: 0, bottom: 0,
+          width: `${pct}%`, background: color, borderRadius: 3,
+          transition: "width 0.8s ease",
+        }} />
+      </div>
+      <span style={{ fontSize: 14, fontWeight: 700, color, minWidth: 32 }}>{score}/10</span>
+    </div>
+  );
+}
+
 // ── section card wrapper ──────────────────────────────────────────────────────
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({ title, children, accent }: { title: string; children: React.ReactNode; accent?: string }) {
   return (
     <section className="glass-card" style={{ padding: "24px 28px" }}>
       <h2 style={{
         fontSize: 11, fontWeight: 700, letterSpacing: "0.1em",
-        textTransform: "uppercase", color: "var(--text-muted)",
+        textTransform: "uppercase", color: accent ?? "var(--text-muted)",
         margin: "0 0 20px",
       }}>
         {title}
@@ -213,6 +235,115 @@ export default function EntryDetailPage() {
           </Section>
         )}
 
+        {/* ─── Dig Deeper — Chat button ─────────────────────────── */}
+        {analysis && (
+          <button
+            onClick={() => router.push(`/chat?entry=${entry.id}`)}
+            className="glass-card"
+            style={{
+              padding: "18px 24px",
+              cursor: "pointer",
+              border: "1px solid rgba(192,132,252,0.25)",
+              background: "linear-gradient(135deg, rgba(124,58,237,0.08), rgba(192,132,252,0.06))",
+              display: "flex", alignItems: "center", gap: 14,
+              transition: "all 0.2s",
+              textAlign: "left",
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = "rgba(192,132,252,0.5)";
+              e.currentTarget.style.transform = "translateY(-1px)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = "rgba(192,132,252,0.25)";
+              e.currentTarget.style.transform = "translateY(0)";
+            }}
+          >
+            <span style={{
+              fontSize: 28, width: 48, height: 48, borderRadius: "50%",
+              background: "rgba(192,132,252,0.12)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}>
+              ◎
+            </span>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "#c4b5fd" }}>
+                Dig Deeper — Inner Voice
+              </div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 2, lineHeight: 1.4 }}>
+                Open a dialogue anchored to this entry. The AI will draw from its
+                symbols, emotions, and archetypal context to speak from within your psyche.
+              </div>
+            </div>
+            <span style={{ color: "#c4b5fd", fontSize: 16, marginLeft: "auto", flexShrink: 0 }}>→</span>
+          </button>
+        )}
+
+        {/* Ego Strength Signal */}
+        {analysis?.ego_strength_signal && (
+          <Section title="Ego Strength" accent="#86efac">
+            <EgoStrengthGauge score={analysis.ego_strength_signal.score} />
+            <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "12px 0 0", lineHeight: 1.6 }}>
+              {analysis.ego_strength_signal.evidence}
+            </p>
+          </Section>
+        )}
+
+        {/* Compensation Axis */}
+        {analysis?.compensation_axis && (
+          <Section title="Compensation Axis" accent="#fbbf24">
+            <div style={{ display: "flex", gap: 16, alignItems: "stretch" }}>
+              <div style={{
+                flex: 1, padding: "14px 16px", borderRadius: 10,
+                background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)",
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "#f87171", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+                  Conscious Attitude
+                </div>
+                <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+                  {analysis.compensation_axis.conscious_attitude}
+                </p>
+              </div>
+              <div style={{
+                display: "flex", alignItems: "center", fontSize: 18, color: "var(--text-muted)",
+                flexShrink: 0, padding: "0 4px",
+              }}>
+                ⇄
+              </div>
+              <div style={{
+                flex: 1, padding: "14px 16px", borderRadius: 10,
+                background: "rgba(134,239,172,0.06)", border: "1px solid rgba(134,239,172,0.15)",
+              }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: "#86efac", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>
+                  Compensating Content
+                </div>
+                <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+                  {analysis.compensation_axis.compensating_content}
+                </p>
+              </div>
+            </div>
+          </Section>
+        )}
+
+        {/* Lysis Assessment */}
+        {analysis?.lysis_assessment && (
+          <Section title="Lysis (Resolution Phase)" accent="#a78bfa">
+            <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+              <span style={{
+                fontSize: 12, padding: "3px 10px", borderRadius: 8,
+                background: "rgba(167,139,250,0.15)", color: "#c4b5fd",
+                fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em",
+              }}>
+                {analysis.lysis_assessment.phase}
+              </span>
+              <ConfidenceBar value={analysis.lysis_assessment.confidence} />
+            </div>
+            <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0, lineHeight: 1.6 }}>
+              {analysis.lysis_assessment.evidence}
+            </p>
+          </Section>
+        )}
+
         {/* Symbols */}
         {analysis?.symbols && analysis.symbols.length > 0 && (
           <Section title={`Symbols — ${analysis.symbols.length} extracted`}>
@@ -254,6 +385,14 @@ export default function EntryDetailPage() {
                     <span style={{ fontSize: 13, fontWeight: 600, color: "#fcd34d" }}>
                       ◈ {arch.name}
                     </span>
+                    {arch.projection_status && (
+                      <span style={{
+                        fontSize: 10, padding: "1px 6px", borderRadius: 8,
+                        background: "rgba(251,191,36,0.1)", color: "#fbbf24",
+                      }}>
+                        {arch.projection_status}
+                      </span>
+                    )}
                   </div>
                   <ConfidenceBar value={arch.confidence} />
                   <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: "8px 0 0", lineHeight: 1.6 }}>
@@ -328,6 +467,19 @@ export default function EntryDetailPage() {
                 </button>
               ))}
             </div>
+          </Section>
+        )}
+
+        {/* Integration guidance (if risk was assessed) */}
+        {entry.integration_guidance && (
+          <Section title="Integration Guidance" accent="#f87171">
+            <p style={{
+              fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7, margin: 0,
+              padding: "14px 16px", borderRadius: 10,
+              background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)",
+            }}>
+              {entry.integration_guidance}
+            </p>
           </Section>
         )}
 

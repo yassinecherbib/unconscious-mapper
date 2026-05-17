@@ -7,6 +7,9 @@ Checks whether a user has met both unlock conditions:
 
 When both pass for the first time, sets chat_unlocked = true on the profile.
 This check runs server-side after every entry submission — never trusted from frontend.
+
+NEW: check_longitudinal_trigger() — decides whether to run season-based
+longitudinal arc analysis and triggers it as a background task.
 """
 from datetime import datetime, timezone
 
@@ -79,3 +82,72 @@ async def get_unlock_progress(user_id: str, db: Client) -> dict:
         "days_elapsed": days_elapsed,
         "unlocked": profile.get("chat_unlocked", False),
     }
+
+
+async def check_longitudinal_trigger(user_id: str, db: Client) -> bool:
+    """
+    Checks whether a psychic season shift has occurred and triggers
+    longitudinal arc analysis if so. Errors are silenced.
+
+    Returns True if analysis was triggered, False otherwise.
+    """
+    from app.services.season_detector import should_trigger_longitudinal
+    from app.services.longitudinal import run_longitudinal_analysis
+
+    try:
+        # Fetch profile for last_longitudinal_at
+        profile_result = (
+            db.table("profiles")
+            .select("last_longitudinal_at, arc_season_signal")
+            .eq("id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        last_at = None
+        if profile_result.data:
+            last_at = profile_result.data.get("last_longitudinal_at")
+
+        # Fetch all entries with analysis metadata
+        entries_result = (
+            db.table("entries")
+            .select("id, created_at, entry_type, analysis")
+            .eq("user_id", user_id)
+            .order("created_at", desc=False)
+            .execute()
+        )
+
+        entries = []
+        for e in (entries_result.data or []):
+            analysis = e.get("analysis") or {}
+            ego = analysis.get("ego_strength_signal")
+            lysis = analysis.get("lysis_assessment")
+            entries.append({
+                "created_at": e["created_at"],
+                "entry_type": e["entry_type"],
+                "ego_strength_signal": ego.get("score") if isinstance(ego, dict) else None,
+                "lysis_assessment": lysis.get("result") if isinstance(lysis, dict) else None,
+                "dominant_archetypes": [
+                    a["name"]
+                    for a in (analysis.get("archetypes") or [])
+                    if a.get("confidence", 0) >= 0.6
+                ],
+            })
+
+        decision = should_trigger_longitudinal(entries, last_at)
+
+        if not decision["should_trigger"]:
+            return False
+
+        # Update arc_season_signal badge on profile before analysis
+        if decision.get("season_signal"):
+            db.table("profiles").update(
+                {"arc_season_signal": decision["season_signal"]}
+            ).eq("id", user_id).execute()
+
+        # Run the full longitudinal analysis
+        await run_longitudinal_analysis(user_id, db)
+        return True
+
+    except Exception as exc:
+        print(f"[unlock] longitudinal trigger failed for {user_id}: {exc}")
+        return False

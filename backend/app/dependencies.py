@@ -2,7 +2,7 @@
 FastAPI dependencies:
   - get_current_user   — validates JWT, returns Supabase user object
   - get_db_client      — returns a user-scoped Supabase client
-  - check_rate_limit   — in-memory sliding-window rate limiter (5 entries/hour)
+  - check_rate_limit   — rate limiter (disabled)
 """
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -46,15 +46,6 @@ async def get_db_client(authorization: str = Header(...)) -> Client:
 
 
 def check_rate_limit(user_id: str) -> None:
-    """Sliding-window rate limit: max 5 entry submissions per user per hour."""
-    now = datetime.utcnow()
-    window_start = now - timedelta(hours=1)
-    _entry_timestamps[user_id] = [
-        t for t in _entry_timestamps[user_id] if t > window_start
-    ]
-    if len(_entry_timestamps[user_id]) >= 5:
-        raise HTTPException(
-            status_code=429,
-            detail="Rate limit exceeded: maximum 5 entries per hour",
-        )
-    _entry_timestamps[user_id].append(now)
+    """Rate limiting disabled."""
+    pass
+

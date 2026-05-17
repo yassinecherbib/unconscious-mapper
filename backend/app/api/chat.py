@@ -1,13 +1,16 @@
 """
-GET /chat/stream — topology-aware SSE subconscious chat.
-Phase 4 will wire in: gate check → seed extraction → topology retrieval → streamed Gemma response.
+POST /chat/stream — topology-aware SSE subconscious chat (fully implemented).
+
+Supports optional seed_entry_id query param — when a user opens chat from
+a specific journal entry, that entry's context is injected first.
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from supabase import Client
 
 from app.dependencies import get_current_user, get_db_client
+from app.services.chat import stream_chat_response
 
 router = APIRouter()
 
@@ -19,23 +22,28 @@ class ChatMessage(BaseModel):
 @router.post("/stream")
 async def chat_stream(
     body: ChatMessage,
+    seed_entry_id: str | None = Query(default=None),
     user=Depends(get_current_user),
     db: Client = Depends(get_db_client),
 ):
     """
-    Phase 4 implementation:
-      1. Gate check — verify chat_unlocked = true in profiles
-      2. Extract seed symbols from user message (lightweight Gemma call)
-      3. Topology retrieval — find top-5 connected symbols via symbol_edges
-      4. Fetch relevant entries by entry_ids from matched edges
-      5. Fetch user's complexes (pre-computed clusters)
-      6. Assemble persona prompt: complexes → retrieved entries → user message
-      7. Stream Gemma response via SSE
+    Topology-aware subconscious chat stream.
 
-    Note: Use fetch + ReadableStream on the frontend — NOT EventSource.
+    Query params:
+      seed_entry_id — optional entry UUID to anchor the context retrieval
+                      (used when user opens chat from a journal entry).
+
+    Pipeline:
+      1. Gate check — verify chat_unlocked on profile
+      2. Topology retrieval with optional seed entry
+      3. Complex assembly with all new fields
+      4. Persona prompt construction
+      5. Stream Gemma response via SSE
+
+    IMPORTANT: Use fetch + ReadableStream on the frontend — NOT EventSource.
     EventSource cannot send Authorization headers.
     """
-    # Gate check stub — Phase 4 replaces this with real unlock verification
+    # Gate check
     profile_result = (
         db.table("profiles")
         .select("chat_unlocked")
@@ -49,13 +57,13 @@ async def chat_stream(
             detail="Chat not yet unlocked. Submit at least 7 entries across 7 days.",
         )
 
-    # Stub — Phase 4 replaces with real streaming response
-    async def stub_stream():
-        yield "data: Chat feature coming in Phase 4.\n\n"
-        yield "data: [DONE]\n\n"
-
     return StreamingResponse(
-        stub_stream(),
+        stream_chat_response(
+            user_id=user.id,
+            user_message=body.message,
+            db=db,
+            seed_entry_id=seed_entry_id,
+        ),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

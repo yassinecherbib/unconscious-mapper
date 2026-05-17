@@ -1,16 +1,22 @@
 """
-Phase 4 — Topology-Based Retrieval Service
+Phase 4 — Topology-Based Retrieval Service (updated)
 
 The retrieval pipeline that makes the chat feature structurally aware:
 
+  Step 0: If seed_entry_id provided, inject that entry first (entry-anchored chat)
   Step 1: Extract 1-3 seed symbols from the user's message (lightweight Gemma call)
   Step 2: Query symbol_edges for the top-5 symbols most connected to any seed
   Step 3: Collect all entry_ids from matching edges (deduplicated)
   Step 4: Fetch those entries (jungian_summary + created_at — not full raw_text)
-  Step 5: Fetch all complexes for the user
+  Step 5: Fetch all complexes for the user with new fields
 
 Fallback: if topology retrieval returns < 3 entries, supplement with the
 most recent entries up to a total of 5. Never return zero context.
+
+Changes vs original:
+  - Accepts optional seed_entry_id for entry-anchored chat
+  - Model updated to gemma-4-27b-it
+  - Complexes select includes all new affective fields
 """
 from google import genai
 from google.genai import types
@@ -24,19 +30,50 @@ MIN_ENTRIES = 3
 MAX_ENTRIES = 5
 
 
-async def get_topology_context(user_id: str, user_message: str, db) -> dict:
+async def get_topology_context(
+    user_id: str,
+    user_message: str,
+    db,
+    seed_entry_id: str | None = None,
+) -> dict:
     """
     Returns { retrieved_entries: [...], complexes: [...] }
     ready to be injected into the persona prompt.
+
+    If seed_entry_id is provided, that entry is fetched and prepended
+    to the retrieved_entries list before topology retrieval runs.
     """
+    pinned_entries: list[dict] = []
+
+    # Step 0: Inject seed entry (entry-anchored chat)
+    if seed_entry_id:
+        seed_result = (
+            db.table("entries")
+            .select("id, created_at, analysis")
+            .eq("id", seed_entry_id)
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+        if seed_result.data:
+            analysis = seed_result.data.get("analysis") or {}
+            pinned_entries.append({
+                "id": seed_result.data["id"],
+                "created_at": seed_result.data["created_at"],
+                "jungian_summary": analysis.get("jungian_summary", ""),
+            })
+
     # Step 1: Extract seed symbols from user message
     seed_symbols = await _extract_seeds(user_message, user_id, db)
 
     # Step 2 & 3: Find connected entries via topology
     entry_ids = await _find_connected_entry_ids(user_id, seed_symbols, db)
+    # Exclude pinned entry from topology dedup
+    if seed_entry_id and seed_entry_id in entry_ids:
+        entry_ids.remove(seed_entry_id)
 
     # Step 4: Fetch those entries
-    retrieved_entries = await _fetch_entries(user_id, entry_ids, db)
+    retrieved_entries = pinned_entries + await _fetch_entries(user_id, entry_ids, db)
 
     # Fallback: supplement with recent entries if topology returned too few
     if len(retrieved_entries) < MIN_ENTRIES:
@@ -44,12 +81,14 @@ async def get_topology_context(user_id: str, user_message: str, db) -> dict:
             user_id, retrieved_entries, MAX_ENTRIES, db
         )
 
-    # Step 5: Fetch complexes
+    # Step 5: Fetch complexes with all new fields
     complexes_result = (
         db.table("complexes")
-        .select("name, summary, symbols")
+        .select(
+            "name, summary, symbols, overdetermined_symbols, affective_core, "
+            "projection_status, golden_shadow, golden_shadow_owned, individuation_note"
+        )
         .eq("user_id", user_id)
-        .order("computed_at", desc=True)
         .execute()
     )
 
@@ -77,8 +116,9 @@ async def _extract_seeds(user_message: str, user_id: str, db) -> list[str]:
     prompt = build_seed_extractor_prompt(user_message, list(known_symbols))
 
     try:
+        from app.services.analysis import GEMMA_MODEL
         response = _client.models.generate_content(
-            model="gemma-4-31b-it",
+            model=GEMMA_MODEL,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
