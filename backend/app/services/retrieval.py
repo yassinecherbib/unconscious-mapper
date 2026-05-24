@@ -44,10 +44,10 @@ async def get_topology_context(user_id: str, user_message: str, db) -> dict:
             user_id, retrieved_entries, MAX_ENTRIES, db
         )
 
-    # Step 5: Fetch complexes
+    # Step 5: Fetch complexes (full schema for persona prompt annotations)
     complexes_result = (
         db.table("complexes")
-        .select("name, summary, symbols")
+        .select("name, summary, symbols, projection_status, golden_shadow, golden_shadow_owned, individuation_note")
         .eq("user_id", user_id)
         .order("computed_at", desc=True)
         .execute()
@@ -77,8 +77,8 @@ async def _extract_seeds(user_message: str, user_id: str, db) -> list[str]:
     prompt = build_seed_extractor_prompt(user_message, list(known_symbols))
 
     try:
-        response = _client.models.generate_content(
-            model="gemma-4-31b-it",
+        response = await _client.aio.models.generate_content(
+            model="gemma-4-26b-a4b-it",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -126,12 +126,23 @@ async def _fetch_entries(user_id: str, entry_ids: list[str], db) -> list[dict]:
         return []
     result = (
         db.table("entries")
-        .select("id, created_at, analysis->jungian_summary")
+        .select("id, created_at, entry_type, analysis")
         .eq("user_id", user_id)
         .in_("id", entry_ids)
         .execute()
     )
-    return result.data or []
+    # Flatten analysis subfields to top level for persona prompt
+    entries = []
+    for row in result.data or []:
+        analysis = row.get("analysis") or {}
+        entries.append({
+            "id": row["id"],
+            "created_at": row["created_at"],
+            "entry_type": row.get("entry_type", "entry"),
+            "jungian_summary": analysis.get("jungian_summary", ""),
+            "ego_strength_signal": analysis.get("ego_strength_signal"),
+        })
+    return entries
 
 
 async def _supplement_with_recent(
@@ -144,7 +155,7 @@ async def _supplement_with_recent(
     needed = target - len(existing)
     result = (
         db.table("entries")
-        .select("id, created_at, analysis->jungian_summary")
+        .select("id, created_at, entry_type, analysis")
         .eq("user_id", user_id)
         .order("created_at", desc=True)
         .limit(needed + len(existing_ids))
@@ -152,5 +163,12 @@ async def _supplement_with_recent(
     )
     for row in result.data or []:
         if row["id"] not in existing_ids and len(existing) < target:
-            existing.append(row)
+            analysis = row.get("analysis") or {}
+            existing.append({
+                "id": row["id"],
+                "created_at": row["created_at"],
+                "entry_type": row.get("entry_type", "entry"),
+                "jungian_summary": analysis.get("jungian_summary", ""),
+                "ego_strength_signal": analysis.get("ego_strength_signal"),
+            })
     return existing

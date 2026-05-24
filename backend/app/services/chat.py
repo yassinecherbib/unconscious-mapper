@@ -9,9 +9,11 @@ Context assembly order (critical — do NOT change):
   2. Topology-retrieved entry excerpts — specific evidence
   3. User's message — last
 
+Temperature: 0.75 (Active Imagination requires generative voice, but must stay grounded)
 Total context budget: keep under 8000 tokens.
 """
 from google import genai
+from google.genai import types
 
 from app.config import settings
 from app.prompts.persona import build_persona_prompt
@@ -37,16 +39,16 @@ async def stream_chat_response(user_id: str, user_message: str, db):
 
     # 3. Stream Gemma response
     try:
-        with _client.models.generate_content_stream(
-            model="gemma-4-31b-it",
+        async with _client.aio.models.generate_content_stream(
+            model="gemma-4-26b-a4b-it",
             contents=user_turn,
-            config={
-                "system_instruction": system_prompt,
-                "max_output_tokens": 1000,
-                "temperature": 0.7,
-            },
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                max_output_tokens=1000,
+                temperature=0.75,
+            ),
         ) as stream:
-            for chunk in stream:
+            async for chunk in stream:
                 if chunk.text:
                     yield f"data: {chunk.text}\n\n"
     except Exception as exc:

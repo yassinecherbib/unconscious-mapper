@@ -42,6 +42,11 @@ async def check_and_unlock(user_id: str, db: Client) -> bool:
         return False
 
     first_entry_at = datetime.fromisoformat(first_entry_at_str)
+    if first_entry_at.tzinfo is None:
+        first_entry_at = first_entry_at.replace(tzinfo=timezone.utc)
+    else:
+        first_entry_at = first_entry_at.astimezone(timezone.utc)
+
     days_elapsed = (datetime.now(timezone.utc) - first_entry_at).days
 
     if days_elapsed < 7:
@@ -72,6 +77,10 @@ async def get_unlock_progress(user_id: str, db: Client) -> dict:
     days_elapsed = 0
     if profile.get("first_entry_at"):
         first = datetime.fromisoformat(profile["first_entry_at"])
+        if first.tzinfo is None:
+            first = first.replace(tzinfo=timezone.utc)
+        else:
+            first = first.astimezone(timezone.utc)
         days_elapsed = (datetime.now(timezone.utc) - first).days
 
     return {

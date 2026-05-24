@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import EntryForm from "@/app/components/EntryForm";
 import EntryCard from "@/app/components/EntryCard";
 import { api, type Entry } from "@/lib/api";
@@ -10,25 +10,29 @@ export default function JournalPage() {
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
 
-  const fetchEntries = useCallback(async () => {
-    try {
-      const data = await api.entries.list();
-      setEntries(data);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Failed to load entries");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchEntries();
-  }, [fetchEntries]);
-
-  async function handleNewEntry(data: { raw_text: string; entry_type: string }) {
-    const entry = await api.entries.create(data);
-    setEntries((prev) => [entry, ...prev]);
-  }
+    let active = true;
+    async function load() {
+      try {
+        const data = await api.entries.list();
+        if (active) {
+          setEntries(data);
+        }
+      } catch (err: unknown) {
+        if (active) {
+          setError(err instanceof Error ? err.message : "Failed to load entries");
+        }
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    }
+    load();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div style={{ maxWidth: 760, margin: "0 auto" }}>
@@ -54,7 +58,9 @@ export default function JournalPage() {
         <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-secondary)", margin: "0 0 20px", letterSpacing: "0.05em", textTransform: "uppercase" }}>
           New entry
         </h2>
-        <EntryForm onSubmit={handleNewEntry} />
+        <EntryForm onComplete={(entry) => {
+          setEntries((prev) => [entry, ...prev]);
+        }} />
       </section>
 
       {/* Entry list */}

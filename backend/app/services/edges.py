@@ -23,6 +23,7 @@ async def upsert_edges(
     entry_id: str,
     symbol_names: list[str],
     db: Client,
+    emotions: list[dict] | None = None,
 ) -> None:
     """
     For a symbols list [A, B, C], generates pairs (A,B), (A,C), (B,C).
@@ -31,6 +32,10 @@ async def upsert_edges(
     If fewer than 2 symbols exist, skips silently (no pairs can be formed).
     Errors during upsert are logged but do not fail the entry submission.
     """
+    if db is None:
+        raise ValueError("db client parameter is required")
+    if emotions is None:
+        emotions = []
     if len(symbol_names) < 2:
         return
 

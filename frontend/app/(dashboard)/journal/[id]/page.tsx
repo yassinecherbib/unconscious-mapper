@@ -213,6 +213,263 @@ export default function EntryDetailPage() {
           </Section>
         )}
 
+        {/* Integration Risk Banner */}
+        {analysis?.integration_risk && analysis.integration_risk.overall_risk_level !== "none" && (
+          <section className="glass-card animate-fade-up" style={{
+            padding: "24px 28px",
+            border: `1px solid ${
+              analysis.integration_risk.overall_risk_level === "high"
+                ? "rgba(239, 68, 68, 0.4)"
+                : analysis.integration_risk.overall_risk_level === "moderate"
+                ? "rgba(245, 158, 11, 0.4)"
+                : "rgba(99, 102, 241, 0.4)"
+            }`,
+            background: `${
+              analysis.integration_risk.overall_risk_level === "high"
+                ? "rgba(239, 68, 68, 0.04)"
+                : analysis.integration_risk.overall_risk_level === "moderate"
+                ? "rgba(245, 158, 11, 0.04)"
+                : "rgba(99, 102, 241, 0.04)"
+            }`,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              <span style={{
+                fontSize: 16,
+                color: 
+                  analysis.integration_risk.overall_risk_level === "high"
+                    ? "#ef4444"
+                    : analysis.integration_risk.overall_risk_level === "moderate"
+                    ? "#f59e0b"
+                    : "#6366f1"
+              }}>
+                ⚠️
+              </span>
+              <h2 style={{
+                fontSize: 11, fontWeight: 700, letterSpacing: "0.1em",
+                textTransform: "uppercase", 
+                color: 
+                  analysis.integration_risk.overall_risk_level === "high"
+                    ? "#ef4444"
+                    : analysis.integration_risk.overall_risk_level === "moderate"
+                    ? "#f59e0b"
+                    : "#818cf8",
+                margin: 0,
+              }}>
+                Clinical Integration Advisory — {analysis.integration_risk.overall_risk_level} Risk
+              </h2>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {/* Flags check */}
+              {Object.entries({
+                "Spiritual Inflation": analysis.integration_risk.spiritual_inflation,
+                "Ego Dissolution": analysis.integration_risk.ego_dissolution_without_regrounding,
+                "Shadow Bypassing": analysis.integration_risk.shadow_bypassing,
+                "Premature Closure": analysis.integration_risk.premature_closure
+              }).map(([label, flag]) => {
+                if (!flag || !flag.present) return null;
+                return (
+                  <div key={label} style={{
+                    padding: "12px 16px",
+                    borderRadius: 10,
+                    background: "rgba(0,0,0,0.2)",
+                    border: "1px solid rgba(255,255,255,0.04)"
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: "#f87171" }}>
+                        ✦ {label}
+                      </span>
+                      {flag.severity && (
+                        <span style={{
+                          fontSize: 9, padding: "1px 5px", borderRadius: 4,
+                          background: flag.severity === "high" ? "rgba(239,68,68,0.2)" : "rgba(245,158,11,0.2)",
+                          color: flag.severity === "high" ? "#f87171" : "#fbbf24",
+                          fontWeight: 600,
+                          textTransform: "uppercase"
+                        }}>
+                          {flag.severity}
+                        </span>
+                      )}
+                      {/* Form check for shadow bypassing */}
+                      {"form" in flag && flag.form && (
+                        <span style={{
+                          fontSize: 9, padding: "1px 5px", borderRadius: 4,
+                          background: "rgba(139,92,246,0.15)",
+                          color: "#c4b5fd"
+                        }}>
+                          form: {flag.form}
+                        </span>
+                      )}
+                    </div>
+                    {flag.evidence && (
+                      <p style={{ fontSize: 12, color: "var(--text-secondary)", margin: 0, lineHeight: 1.5 }}>
+                        <strong style={{ color: "var(--text-muted)" }}>Evidence:</strong> {flag.evidence}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Guidance */}
+              <div style={{
+                marginTop: 6,
+                paddingTop: 14,
+                borderTop: "1px solid rgba(255,255,255,0.06)"
+              }}>
+                <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)", margin: "0 0 6px", letterSpacing: "0.05em" }}>
+                  Regrounding & Integration Guidance
+                </p>
+                <p style={{ fontSize: 13, color: "var(--text-primary)", lineHeight: 1.7, margin: 0 }}>
+                  {analysis.integration_risk.integration_guidance}
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* Ego Strength Section */}
+        {analysis?.ego_strength_signal !== undefined && (
+          <Section title="Ego Strength Signal">
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              <div style={{ display: "flex", gap: 6, width: "100%" }}>
+                {[1, 2, 3, 4, 5, 6].map((lvl) => {
+                  const isActive = (analysis.ego_strength_signal ?? 0) >= lvl;
+                  const isExact = analysis.ego_strength_signal === lvl;
+                  return (
+                    <div
+                      key={lvl}
+                      style={{
+                        flex: 1,
+                        height: 12,
+                        borderRadius: 4,
+                        background: isExact
+                          ? "linear-gradient(90deg, var(--neon-cyan), var(--neon-pulse))"
+                          : isActive
+                          ? "var(--neon-violet)"
+                          : "rgba(255,255,255,0.06)",
+                        border: isExact ? "1px solid #fff" : "1px solid transparent",
+                        boxShadow: isExact ? "0 0 12px var(--neon-pulse)" : "none",
+                        transition: "all 0.4s ease",
+                      }}
+                    />
+                  );
+                })}
+              </div>
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <span style={{ fontSize: 14, fontWeight: 600, color: "#22d3ee" }}>
+                    Stage {analysis.ego_strength_signal}: {[
+                      "Absent (Pure Observation)",
+                      "Passive / Overwhelmed",
+                      "Failing to Act",
+                      "Holding Ground",
+                      "Engaging Confrontation",
+                      "Integrating Resolving"
+                    ][analysis.ego_strength_signal - 1] ?? ""}
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.05em", textTransform: "uppercase" }}>
+                    Ego-Unconscious Boundary
+                  </span>
+                </div>
+                <p style={{ fontSize: 13, color: "var(--text-secondary)", margin: 0, lineHeight: 1.6 }}>
+                  {[
+                    "Pure observation with no active dream-ego presence or choices.",
+                    "Ego is paralyzed, fleeing, or completely overwhelmed by unconscious content.",
+                    "Ego attempts to take action but fails, remains unprepared, or lacks agency.",
+                    "Ego maintains presence, boundary, and containment under high psychological pressure.",
+                    "Ego actively confronts, questions, dialogues, or makes conscious choices during the experience.",
+                    "Ego successfully resolves structural conflicts, receives symbols, or collaborates with the unconscious."
+                  ][analysis.ego_strength_signal - 1] ?? ""}
+                </p>
+              </div>
+            </div>
+          </Section>
+        )}
+
+        {/* Lysis / Compensation Panel */}
+        {((entry.entry_type === "dream" && analysis?.lysis_assessment) || analysis?.compensation_axis) && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 20 }}>
+            {entry.entry_type === "dream" && analysis?.lysis_assessment && (
+              <Section title="Dream Structural Resolution (Lysis)">
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div>
+                    <span style={{
+                      display: "inline-block",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      textTransform: "uppercase",
+                      padding: "4px 10px",
+                      borderRadius: 8,
+                      letterSpacing: "0.05em",
+                      background: 
+                        analysis.lysis_assessment === "resolved" 
+                          ? "rgba(16,185,129,0.15)" 
+                          : analysis.lysis_assessment === "unresolved" 
+                          ? "rgba(239,68,68,0.15)" 
+                          : "rgba(245,158,11,0.15)",
+                      color: 
+                        analysis.lysis_assessment === "resolved" 
+                          ? "#34d399" 
+                          : analysis.lysis_assessment === "unresolved" 
+                          ? "#f87171" 
+                          : "#fbbf24",
+                      border: 
+                        analysis.lysis_assessment === "resolved" 
+                          ? "1px solid rgba(16,185,129,0.3)" 
+                          : analysis.lysis_assessment === "unresolved" 
+                          ? "1px solid rgba(239,68,68,0.3)" 
+                          : "1px solid rgba(245,158,11,0.3)",
+                      boxShadow: 
+                        analysis.lysis_assessment === "resolved"
+                          ? "0 0 10px rgba(16,185,129,0.1)"
+                          : "none"
+                    }}>
+                      {analysis.lysis_assessment}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.6, margin: 0 }}>
+                    {analysis.lysis_assessment === "resolved" && (
+                      "The dream reaches a structural resolution, indicating the conscious ego successfully metabolizes or integrates this unconscious message."
+                    )}
+                    {analysis.lysis_assessment === "unresolved" && (
+                      "The dream ends in suspended action, threat, or interruption, suggesting an active psychic conflict or complex requiring deeper conscious containment."
+                    )}
+                    {analysis.lysis_assessment === "ambiguous" && (
+                      "The structural resolution is transitional or open-ended. The symbol system is in flux, representing an unfolding integration process."
+                    )}
+                  </p>
+                </div>
+              </Section>
+            )}
+
+            {analysis?.compensation_axis && (
+              <Section title="Psychic Compensation Axis">
+                <div style={{
+                  borderLeft: "3px solid var(--neon-violet)",
+                  paddingLeft: 16,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6
+                }}>
+                  <p style={{
+                    fontSize: 13,
+                    color: "#c4b5fd",
+                    lineHeight: 1.6,
+                    margin: 0,
+                    fontStyle: "italic"
+                  }}>
+                    “{analysis.compensation_axis}”
+                  </p>
+                  <span style={{ fontSize: 10, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    {"Psyche's correction to conscious one-sidedness"}
+                  </span>
+                </div>
+              </Section>
+            )}
+          </div>
+        )}
+
+
         {/* Symbols */}
         {analysis?.symbols && analysis.symbols.length > 0 && (
           <Section title={`Symbols — ${analysis.symbols.length} extracted`}>

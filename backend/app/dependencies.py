@@ -5,7 +5,7 @@ FastAPI dependencies:
   - check_rate_limit   — in-memory sliding-window rate limiter (5 entries/hour)
 """
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, Header, HTTPException
 from supabase import Client
@@ -47,7 +47,7 @@ async def get_db_client(authorization: str = Header(...)) -> Client:
 
 def check_rate_limit(user_id: str) -> None:
     """Sliding-window rate limit: max 5 entry submissions per user per hour."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     window_start = now - timedelta(hours=1)
     _entry_timestamps[user_id] = [
         t for t in _entry_timestamps[user_id] if t > window_start

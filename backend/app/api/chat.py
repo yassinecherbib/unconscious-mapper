@@ -1,6 +1,6 @@
 """
-GET /chat/stream — topology-aware SSE subconscious chat.
-Phase 4 will wire in: gate check → seed extraction → topology retrieval → streamed Gemma response.
+GET  /chat/stream   — topology-aware SSE subconscious chat (Active Imagination)
+GET  /chat/longitudinal — fetch the latest longitudinal analysis for the user
 """
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from supabase import Client
 
 from app.dependencies import get_current_user, get_db_client
+from app.services.chat import stream_chat_response
 
 router = APIRouter()
 
@@ -23,19 +24,20 @@ async def chat_stream(
     db: Client = Depends(get_db_client),
 ):
     """
-    Phase 4 implementation:
-      1. Gate check — verify chat_unlocked = true in profiles
-      2. Extract seed symbols from user message (lightweight Gemma call)
-      3. Topology retrieval — find top-5 connected symbols via symbol_edges
-      4. Fetch relevant entries by entry_ids from matched edges
-      5. Fetch user's complexes (pre-computed clusters)
-      6. Assemble persona prompt: complexes → retrieved entries → user message
-      7. Stream Gemma response via SSE
+    Active Imagination chat — streams the unconscious persona response via SSE.
 
-    Note: Use fetch + ReadableStream on the frontend — NOT EventSource.
+    Steps:
+      1. Gate check — verify chat_unlocked = true in profiles
+      2. Extract seed symbols from user message (Gemma call, temp=0.0)
+      3. Topology retrieval — find connected entries via symbol_edges
+      4. Fetch user's complexes (pre-computed, with projection_status + golden_shadow)
+      5. Assemble persona prompt: complexes → retrieved entries → user message
+      6. Stream Gemma response (temp=0.75)
+
+    Frontend: use fetch + ReadableStream, NOT EventSource.
     EventSource cannot send Authorization headers.
     """
-    # Gate check stub — Phase 4 replaces this with real unlock verification
+    # Gate check
     profile_result = (
         db.table("profiles")
         .select("chat_unlocked")
@@ -49,13 +51,35 @@ async def chat_stream(
             detail="Chat not yet unlocked. Submit at least 7 entries across 7 days.",
         )
 
-    # Stub — Phase 4 replaces with real streaming response
-    async def stub_stream():
-        yield "data: Chat feature coming in Phase 4.\n\n"
-        yield "data: [DONE]\n\n"
-
     return StreamingResponse(
-        stub_stream(),
+        stream_chat_response(user.id, body.message, db),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/longitudinal")
+async def get_longitudinal(
+    user=Depends(get_current_user),
+    db: Client = Depends(get_db_client),
+):
+    """
+    Returns the most recent longitudinal individuation arc analysis for the user.
+    Includes the season_signal so the UI can contextually frame the output.
+    Returns 404 if no analysis has been computed yet.
+    """
+    result = (
+        db.table("longitudinal_analyses")
+        .select("result, season_signal, trigger_reasons, created_at")
+        .eq("user_id", user.id)
+        .order("created_at", desc=True)
+        .limit(1)
+        .maybe_single()
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(
+            status_code=404,
+            detail="No longitudinal analysis yet. Keep journaling — it runs when the psyche signals a season shift.",
+        )
+    return result.data

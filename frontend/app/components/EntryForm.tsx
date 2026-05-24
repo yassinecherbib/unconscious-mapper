@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { api, type Entry, type AmplificationQuestion } from "@/lib/api";
 
 interface Props {
-  onSubmit: (data: { raw_text: string; entry_type: string }) => Promise<void>;
+  onComplete: (entry: Entry) => void;
 }
 
 const TYPES = [
@@ -14,26 +15,54 @@ const TYPES = [
 
 const MAX_CHARS = 5000;
 
-export default function EntryForm({ onSubmit }: Props) {
+export default function EntryForm({ onComplete }: Props) {
+  // Step machine: "input" | "amplify"
+  const [step, setStep] = useState<"input" | "amplify">("input");
   const [entryType, setEntryType] = useState<string>("dream");
   const [text, setText] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Amplification state
+  const [entryId, setEntryId] = useState<string | null>(null);
+  const [questions, setQuestions] = useState<AmplificationQuestion[]>([]);
+  const [associations, setAssociations] = useState<Record<string, string>>({});
+
+  async function handleInitialSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!text.trim()) return;
 
     setLoading(true);
     setError(null);
-    setSuccess(false);
 
     try {
-      await onSubmit({ raw_text: text.trim(), entry_type: entryType });
-      setText("");
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
+      // Step 1: Submit raw text
+      const result = await api.entries.create({
+        raw_text: text.trim(),
+        entry_type: entryType,
+      });
+
+      setEntryId(result.entry_id);
+
+      if (result.amplification_questions && result.amplification_questions.length > 0) {
+        setQuestions(result.amplification_questions);
+        // Pre-fill association inputs
+        const initialAssoc: Record<string, string> = {};
+        result.amplification_questions.forEach((q) => {
+          initialAssoc[q.symbol] = "";
+        });
+        setAssociations(initialAssoc);
+        setStep("amplify");
+      } else {
+        // No questions, proceed directly to complete the analysis with empty associations
+        const finalEntry = await api.entries.amplify({
+          entry_id: result.entry_id,
+          personal_associations: {},
+        });
+        onComplete(finalEntry);
+        resetForm();
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -41,12 +70,125 @@ export default function EntryForm({ onSubmit }: Props) {
     }
   }
 
+  async function handleAmplifySubmit(skip: boolean) {
+    if (!entryId) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const finalAssociations = skip ? {} : associations;
+      const finalEntry = await api.entries.amplify({
+        entry_id: entryId,
+        personal_associations: finalAssociations,
+      });
+      onComplete(finalEntry);
+      resetForm();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function resetForm() {
+    setText("");
+    setEntryId(null);
+    setQuestions([]);
+    setAssociations({});
+    setStep("input");
+    setSuccess(true);
+    setTimeout(() => setSuccess(false), 3000);
+  }
+
   const charCount = text.length;
   const charPct   = (charCount / MAX_CHARS) * 100;
   const nearLimit = charPct > 80;
 
+  if (step === "amplify") {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 24 }} className="animate-fade-in">
+        <div style={{ paddingBottom: 16, borderBottom: "1px solid var(--border-subtle)" }}>
+          <h3 style={{ fontSize: 16, fontWeight: 600, color: "#c4b5fd", margin: "0 0 6px" }}>
+            Personal Amplification
+          </h3>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", margin: 0, lineHeight: 1.5 }}>
+            To map your psyche accurately, we query your personal associations.
+            Archetypal default definitions are only applied when your own associations are absent.
+          </p>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          {questions.map((q) => (
+            <div key={q.symbol} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <label style={{ fontSize: 13, fontWeight: 600, color: "var(--text-secondary)" }}>
+                Symbol: <span style={{ color: "#c4b5fd" }}>&quot;{q.symbol}&quot;</span>
+              </label>
+              <p style={{ fontSize: 12, color: "var(--text-muted)", margin: "0 0 4px", fontStyle: "italic" }}>
+                {q.question}
+              </p>
+              <input
+                type="text"
+                className="input-dark"
+                placeholder="What is your immediate association, history, or memory with this symbol?"
+                value={associations[q.symbol] || ""}
+                onChange={(e) =>
+                  setAssociations((prev) => ({ ...prev, [q.symbol]: e.target.value }))
+                }
+                disabled={loading}
+                style={{ fontSize: 13 }}
+              />
+            </div>
+          ))}
+        </div>
+
+        {error && (
+          <p style={{
+            color: "#f87171", fontSize: 13, padding: "10px 14px",
+            background: "rgba(248,113,113,0.1)", borderRadius: 8,
+            border: "1px solid rgba(248,113,113,0.3)",
+            margin: 0
+          }}>
+            {error}
+          </p>
+        )}
+
+        <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+          <button
+            type="button"
+            className="btn-primary"
+            onClick={() => handleAmplifySubmit(false)}
+            disabled={loading}
+            style={{ flex: 1, minWidth: 150 }}
+          >
+            {loading ? "Analysing with Gemma..." : "Submit & Interpret"}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleAmplifySubmit(true)}
+            disabled={loading}
+            style={{
+              flex: 1,
+              padding: "10px 16px",
+              borderRadius: 8,
+              border: "1px solid var(--border-subtle)",
+              background: "rgba(255,255,255,0.02)",
+              color: "var(--text-secondary)",
+              cursor: "pointer",
+              transition: "all 0.2s"
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.05)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.02)")}
+          >
+            Skip to Defaults
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <form onSubmit={handleInitialSubmit} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
 
       {/* Type selector */}
       <div>
@@ -133,7 +275,7 @@ export default function EntryForm({ onSubmit }: Props) {
         disabled={loading || !text.trim()}
         style={{ alignSelf: "flex-start", minWidth: 160 }}
       >
-        {loading ? "Analysing with Gemma…" : "Record entry"}
+        {loading ? "Querying unconscious..." : "Record entry"}
       </button>
     </form>
   );
