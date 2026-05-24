@@ -2,12 +2,12 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 /**
- * Auth middleware — session refresh + route protection.
+ * Auth proxy (formerly middleware) — session refresh + route protection.
  *
  * Protected routes: /journal, /map, /chat  → redirect to /login if no session
  * Auth routes:      /login, /register      → redirect to /journal if already logged in
  */
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(
