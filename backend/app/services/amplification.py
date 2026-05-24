@@ -24,6 +24,32 @@ from app.models import AmplificationResult
 _client = genai.Client(api_key=settings.gemini_api_key)
 
 
+def parse_and_map_amplification_result(raw_json_str: str) -> list[dict]:
+    try:
+        data = json.loads(raw_json_str)
+        if isinstance(data, list):
+            questions = data
+        elif isinstance(data, dict):
+            questions = data.get("symbols_to_amplify") or data.get("symbols") or data.get("questions") or []
+        else:
+            questions = []
+
+        if not isinstance(questions, list):
+            questions = []
+
+        mapped = []
+        for q in questions:
+            if isinstance(q, dict):
+                symbol = q.get("symbol") or q.get("name") or ""
+                question = q.get("question") or q.get("text") or q.get("prompt") or ""
+                if symbol and question:
+                    mapped.append({"symbol": symbol, "question": question})
+        return mapped
+    except Exception as exc:
+        print(f"[amplification] failed to parse JSON: {exc}")
+        return []
+
+
 async def get_amplification_questions(
     raw_text: str,
     entry_type: str,
@@ -41,15 +67,14 @@ async def get_amplification_questions(
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=AmplificationResult,
                 max_output_tokens=300,
                 temperature=0.3,
             ),
         )
-        if response.parsed is None:
-            print(f"[amplification] model returned no structured output. Raw: {response.text[:500]}")
+        if not response.text:
+            print("[amplification] model returned empty output")
             return []
-        return [q.model_dump() for q in response.parsed.symbols_to_amplify]
+        return parse_and_map_amplification_result(response.text)
     except Exception as exc:
         print(f"[amplification] question generation failed: {exc}")
         return []

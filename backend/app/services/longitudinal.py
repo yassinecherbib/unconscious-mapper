@@ -19,6 +19,24 @@ from app.models import LongitudinalResult
 _client = genai.Client(api_key=settings.gemini_api_key)
 
 
+def parse_and_map_longitudinal(raw_json_str: str) -> dict | None:
+    try:
+        data = json.loads(raw_json_str)
+        if isinstance(data, list) and len(data) > 0:
+            data = data[0]
+        if not isinstance(data, dict):
+            return None
+        return {
+            "individuation_arc_summary": str(data.get("individuation_arc_summary") or data.get("individuation_summary") or ""),
+            "dynamic_shadow_tracker": str(data.get("dynamic_shadow_tracker") or data.get("shadow_tracker") or ""),
+            "transpersonal_integration_state": str(data.get("transpersonal_integration_state") or data.get("integration_state") or ""),
+            "clinical_risk_advisory": data.get("clinical_risk_advisory") or data.get("risk_advisory"),
+        }
+    except Exception as exc:
+        print(f"[longitudinal] failed to parse JSON: {exc}")
+        return None
+
+
 async def maybe_run_longitudinal(user_id: str, db) -> dict | None:
     """
     Checks season shift conditions, runs longitudinal analysis if triggered.
@@ -85,17 +103,18 @@ async def maybe_run_longitudinal(user_id: str, db) -> dict | None:
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=LongitudinalResult,
                 max_output_tokens=1500,
                 temperature=0.3,
             ),
         )
 
-        if response.parsed is None:
-            print(f"[longitudinal] model returned no structured output. Raw: {response.text[:500]}")
+        if not response.text:
+            print("[longitudinal] model returned empty output")
             return None
 
-        result = response.parsed.model_dump()
+        result = parse_and_map_longitudinal(response.text)
+        if not result:
+            return None
 
         # Store in longitudinal_analyses table
         db.table("longitudinal_analyses").insert({

@@ -20,6 +20,24 @@ from app.prompts.seed_extractor import build_seed_extractor_prompt
 
 _client = genai.Client(api_key=settings.gemini_api_key)
 
+
+import json
+
+def parse_seed_symbols(raw_json_str: str) -> list[str]:
+    try:
+        data = json.loads(raw_json_str)
+        if isinstance(data, list):
+            return [str(item) for item in data]
+        elif isinstance(data, dict):
+            seeds = data.get("seeds") or data.get("symbols") or []
+            if isinstance(seeds, list):
+                return [str(item) for item in seeds]
+        return []
+    except Exception as exc:
+        print(f"[retrieval] failed to parse seeds: {exc}")
+        return []
+
+
 MIN_ENTRIES = 3
 MAX_ENTRIES = 5
 
@@ -82,12 +100,13 @@ async def _extract_seeds(user_message: str, user_id: str, db) -> list[str]:
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=list[str],
                 max_output_tokens=100,
                 temperature=0.1,
             ),
         )
-        return response.parsed or []
+        if not response.text:
+            return []
+        return parse_seed_symbols(response.text)
     except Exception as exc:
         print(f"[retrieval] seed extraction failed: {exc} — falling back to word split")
         # Fallback: match words against known symbols

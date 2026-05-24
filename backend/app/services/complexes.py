@@ -7,6 +7,7 @@ and sends to Gemma for Jungian cluster detection with psychic-charge scoring.
 
 Stale complex rows are never accumulated — each run is a clean recompute.
 """
+import json
 from google import genai
 from google.genai import types
 
@@ -15,6 +16,60 @@ from app.models import Complex
 from app.prompts.complex_detector import build_complex_detector_prompt
 
 _client = genai.Client(api_key=settings.gemini_api_key)
+
+
+def parse_and_map_complexes(raw_json_str: str) -> list[Complex]:
+    try:
+        data = json.loads(raw_json_str)
+        if isinstance(data, dict):
+            complexes_list = data.get("complexes") or data.get("clusters") or data.get("data")
+            if isinstance(complexes_list, list):
+                data = complexes_list
+            else:
+                data = [data]
+        if not isinstance(data, list):
+            data = []
+
+        res = []
+        for c in data:
+            if isinstance(c, dict):
+                name = c.get("name") or ""
+                summary = c.get("summary") or ""
+                symbols = c.get("symbols") or []
+                if not isinstance(symbols, list):
+                    symbols = []
+                symbols = [str(s) for s in symbols]
+
+                overdetermined_symbols = c.get("overdetermined_symbols") or []
+                if not isinstance(overdetermined_symbols, list):
+                    overdetermined_symbols = []
+                overdetermined_symbols = [str(os) for os in overdetermined_symbols]
+
+                affective_core = c.get("affective_core")
+                projection_status = c.get("projection_status") or "ambiguous"
+                golden_shadow = c.get("golden_shadow")
+                if isinstance(golden_shadow, str):
+                    golden_shadow = golden_shadow.lower() == "true"
+                golden_shadow_owned = c.get("golden_shadow_owned")
+                if isinstance(golden_shadow_owned, str):
+                    golden_shadow_owned = golden_shadow_owned.lower() == "true"
+                individuation_note = c.get("individuation_note")
+
+                res.append(Complex(
+                    name=name,
+                    summary=summary,
+                    symbols=symbols,
+                    overdetermined_symbols=overdetermined_symbols,
+                    affective_core=affective_core,
+                    projection_status=projection_status,
+                    golden_shadow=golden_shadow,
+                    golden_shadow_owned=golden_shadow_owned,
+                    individuation_note=individuation_note
+                ))
+        return res
+    except Exception as exc:
+        print(f"[complexes] failed to parse complexes JSON: {exc}")
+        return []
 
 
 async def detect_and_store_complexes(user_id: str, db) -> list[Complex]:
@@ -53,7 +108,6 @@ async def detect_and_store_complexes(user_id: str, db) -> list[Complex]:
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=list[Complex],
                 max_output_tokens=2000,
                 temperature=0.3,
             ),
@@ -62,11 +116,11 @@ async def detect_and_store_complexes(user_id: str, db) -> list[Complex]:
         print(f"[complexes] LLM call failed for user {user_id}: {exc}")
         return []
 
-    if response.parsed is None:
-        print(f"[complexes] Model returned no structured output for user {user_id}")
+    if not response.text:
+        print(f"[complexes] Model returned empty output for user {user_id}")
         return []
 
-    complexes: list[Complex] = response.parsed
+    complexes = parse_and_map_complexes(response.text)
 
     # DELETE + INSERT (clean recompute)
     db.table("complexes").delete().eq("user_id", user_id).execute()

@@ -30,6 +30,44 @@ def _should_run(entry_type: str, ego_strength_signal: int | None) -> bool:
     return False
 
 
+def parse_and_map_integration_risk(raw_json_str: str) -> dict | None:
+    try:
+        data = json.loads(raw_json_str)
+        if isinstance(data, list) and len(data) > 0:
+            data = data[0]
+        if not isinstance(data, dict):
+            return None
+
+        # Helper to parse flags
+        def parse_flag(flag_data, shadow=False) -> dict:
+            if not isinstance(flag_data, dict):
+                return {"present": False, "severity": None, "evidence": None}
+            present = flag_data.get("present", False)
+            if isinstance(present, str):
+                present = present.lower() == "true"
+            severity = flag_data.get("severity")
+            evidence = flag_data.get("evidence")
+            res = {"present": present, "severity": severity, "evidence": evidence}
+            if shadow:
+                res["form"] = flag_data.get("form")
+            return res
+
+        res = {
+            "spiritual_inflation": parse_flag(data.get("spiritual_inflation")),
+            "ego_dissolution_without_regrounding": parse_flag(data.get("ego_dissolution_without_regrounding")),
+            "shadow_bypassing": parse_flag(data.get("shadow_bypassing"), shadow=True),
+            "premature_closure": parse_flag(data.get("premature_closure")),
+            "integration_guidance": str(data.get("integration_guidance") or ""),
+            "overall_risk_level": str(data.get("overall_risk_level") or "none").lower(),
+        }
+        if res["overall_risk_level"] not in ["none", "low", "moderate", "high"]:
+            res["overall_risk_level"] = "none"
+        return res
+    except Exception as exc:
+        print(f"[integration] failed to parse JSON: {exc}")
+        return None
+
+
 async def run_integration_risk(
     raw_text: str,
     entry_type: str,
@@ -75,15 +113,15 @@ async def run_integration_risk(
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=IntegrationRiskResult,
                 max_output_tokens=800,
                 temperature=0.2,
             ),
         )
-        if response.parsed is None:
-            print(f"[integration_risk] model returned no structured output. Raw: {response.text[:500]}")
+        if not response.text:
+            print("[integration_risk] model returned empty output")
             return None
-        return response.parsed.model_dump()
+        return parse_and_map_integration_risk(response.text)
     except Exception as exc:
         print(f"[integration_risk] assessment failed: {exc}")
         return None
+
