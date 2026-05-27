@@ -126,6 +126,13 @@ export interface Archetype {
   projection_status?: "projected" | "integrating" | "ambiguous";
 }
 
+export interface SymbolArchetypeAttribution {
+  symbol: string;
+  archetype: string;
+  confidence: number;
+  evidence: string;
+}
+
 export interface Emotion {
   name: string;
   valence: number;
@@ -158,13 +165,39 @@ export interface AnalysisResult {
   lysis_assessment?: "resolved" | "unresolved" | "ambiguous";
   jungian_summary: string;
   connections_to_previous: string[];
+  symbol_archetype_attributions?: SymbolArchetypeAttribution[];
   integration_risk?: IntegrationRiskResult;
   error?: string;
 }
 
+export interface GraphNode {
+  id: string;
+  label?: string;
+  type?: "symbol" | "archetype";
+  value: number;
+  dominant_archetype?: string | null;
+  dominant_confidence?: number;
+  is_bridge?: boolean;
+  bridge_score?: number;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+  value: number;
+  type?: "cooccurrence" | "attribution";
+  decayed_value?: number;
+  recency_weight?: number;
+  confidence?: number;
+}
+
 export interface GraphData {
-  nodes: { id: string; value: number }[];
-  edges: { source: string; target: string; value: number }[];
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+  meta?: {
+    half_life_days?: number;
+    legacy_inference_multiplier?: number;
+  };
 }
 
 export interface UnlockProgress {

@@ -3,7 +3,7 @@ Pydantic models for the Jungian analysis JSONB shape and complexes.
 These are used to validate AI output before any DB write.
 """
 from typing import Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Symbol(BaseModel):
@@ -17,6 +17,13 @@ class Archetype(BaseModel):
     confidence: float  # 0.0 – 1.0
     evidence: str
     projection_status: Optional[str] = None  # "projected" | "integrating" | "ambiguous"
+
+
+class SymbolArchetypeAttribution(BaseModel):
+    symbol: str
+    archetype: str
+    confidence: float
+    evidence: str
 
 
 class Emotion(BaseModel):
@@ -35,6 +42,7 @@ class AnalysisResult(BaseModel):
     lysis_assessment: Optional[str] = None       # NEW — "resolved" | "unresolved" | "ambiguous"
     jungian_summary: str
     connections_to_previous: list[str]           # list of entry UUIDs
+    symbol_archetype_attributions: list[SymbolArchetypeAttribution] = Field(default_factory=list)
 
 
 class Complex(BaseModel):
@@ -85,4 +93,3 @@ class LongitudinalResult(BaseModel):
     dynamic_shadow_tracker: str
     transpersonal_integration_state: str
     clinical_risk_advisory: Optional[str] = None
-

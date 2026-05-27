@@ -102,6 +102,14 @@ You must return a single JSON object. Do not wrap it in an outer array. Use the 
       "projection_status": "projected | integrating | ambiguous"
     }}
   ],
+  "symbol_archetype_attributions": [
+    {{
+      "symbol": "Exact symbol name from symbols[]",
+      "archetype": "Exact archetype name from archetypes[]",
+      "confidence": 0.0 to 1.0 (float),
+      "evidence": "Why this specific symbol carries this archetypal charge in this entry"
+    }}
+  ],
   "emotions": [
     {{
       "name": "Name of emotion",
@@ -125,6 +133,7 @@ You must return a single JSON object. Do not wrap it in an outer array. Use the 
 ---
 RULES
 - Extract what is actually present. Absence of a strong archetype is valid output.
+- For symbol_archetype_attributions, link only symbols to archetypes that are genuinely supported by this entry. Do not force every symbol to every archetype.
 - If the text is too short or vague for meaningful extraction, return minimal but valid output and note "insufficient material" in the jungian_summary.
 - Return strictly valid JSON matching the format above. No markdown, no explanation, no preamble. Just raw JSON.
 ---

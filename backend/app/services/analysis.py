@@ -16,7 +16,7 @@ from google import genai
 from google.genai import types
 
 from app.config import settings
-from app.models import AnalysisResult, Symbol, Archetype, Emotion
+from app.models import AnalysisResult, Symbol, Archetype, Emotion, SymbolArchetypeAttribution
 from app.prompts.extractor import build_extractor_prompt
 
 # Initialised once — thread-safe for FastAPI's async context
@@ -94,18 +94,50 @@ def parse_and_map_analysis_result(raw_json_str: str) -> AnalysisResult:
                 intensity = 0.5
             mapped_emotions.append(Emotion(name=name, valence=valence, intensity=intensity))
 
-    # 4. Map themes
+    # 4. Map symbol -> archetype attributions
+    attributions_raw = (
+        data.get("symbol_archetype_attributions")
+        or data.get("symbol_archetypes")
+        or data.get("archetype_attributions")
+        or []
+    )
+    if not isinstance(attributions_raw, list):
+        attributions_raw = []
+    mapped_attributions = []
+    for item in attributions_raw:
+        if not isinstance(item, dict):
+            continue
+        symbol = item.get("symbol") or item.get("name") or item.get("source") or ""
+        archetype = item.get("archetype") or item.get("target") or item.get("archetype_name") or ""
+        confidence = item.get("confidence")
+        try:
+            confidence = float(confidence) if confidence is not None else 0.5
+        except (ValueError, TypeError):
+            confidence = 0.5
+        confidence = max(0.0, min(1.0, confidence))
+        evidence = item.get("evidence") or item.get("citation") or item.get("reason") or ""
+        if symbol and archetype:
+            mapped_attributions.append(
+                SymbolArchetypeAttribution(
+                    symbol=str(symbol),
+                    archetype=str(archetype),
+                    confidence=confidence,
+                    evidence=str(evidence),
+                )
+            )
+
+    # 5. Map themes
     themes = data.get("themes", [])
     if not isinstance(themes, list):
         themes = []
     themes = [str(t) for t in themes]
 
-    # 5. Map compensation axis
+    # 6. Map compensation axis
     compensation_axis = data.get("compensation_axis") or data.get("compensation")
     if compensation_axis is not None:
         compensation_axis = str(compensation_axis)
 
-    # 6. Map ego strength signal
+    # 7. Map ego strength signal
     ego_strength_raw = data.get("ego_strength_signal") or data.get("ego_strength")
     ego_strength_signal = None
     if isinstance(ego_strength_raw, dict):
@@ -116,7 +148,7 @@ def parse_and_map_analysis_result(raw_json_str: str) -> AnalysisResult:
         except (ValueError, TypeError):
             ego_strength_signal = None
 
-    # 7. Map lysis assessment
+    # 8. Map lysis assessment
     lysis_raw = data.get("lysis_assessment")
     lysis_assessment = None
     if isinstance(lysis_raw, dict):
@@ -126,10 +158,10 @@ def parse_and_map_analysis_result(raw_json_str: str) -> AnalysisResult:
         if lysis_assessment not in ["resolved", "unresolved", "ambiguous"]:
             lysis_assessment = "ambiguous"
 
-    # 8. Map summary
+    # 9. Map summary
     jungian_summary = data.get("jungian_summary") or data.get("summary") or ""
 
-    # 9. Map connections to previous
+    # 10. Map connections to previous
     connections_to_previous = data.get("connections_to_previous") or data.get("connections") or []
     if not isinstance(connections_to_previous, list):
         connections_to_previous = []
@@ -144,7 +176,8 @@ def parse_and_map_analysis_result(raw_json_str: str) -> AnalysisResult:
         ego_strength_signal=ego_strength_signal,
         lysis_assessment=lysis_assessment,
         jungian_summary=jungian_summary,
-        connections_to_previous=connections_to_previous
+        connections_to_previous=connections_to_previous,
+        symbol_archetype_attributions=mapped_attributions,
     )
 
 
