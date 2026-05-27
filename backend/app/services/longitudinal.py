@@ -105,6 +105,7 @@ async def maybe_run_longitudinal(user_id: str, db) -> dict | None:
                 response_mime_type="application/json",
                 max_output_tokens=1500,
                 temperature=0.3,
+                http_options=types.HttpOptions(timeout=180000),
             ),
         )
 

@@ -84,8 +84,8 @@ Return ONLY valid JSON. No markdown. No preamble.
 {{
   "symbols_to_amplify": [
     {{
-      "symbol": str,          // The exact symbol term as it appears in the entry
-      "question": str         // The question to ask the user
+      "symbol": "the exact symbol term as it appears in the entry",
+      "question": "the question to ask the user"
     }}
   ]
 }}

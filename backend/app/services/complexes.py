@@ -110,6 +110,7 @@ async def detect_and_store_complexes(user_id: str, db) -> list[Complex]:
                 response_mime_type="application/json",
                 max_output_tokens=2000,
                 temperature=0.3,
+                http_options=types.HttpOptions(timeout=180000),
             ),
         )
     except Exception as exc:

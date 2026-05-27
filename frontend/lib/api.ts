@@ -12,19 +12,26 @@ async function getToken(): Promise<string | null> {
 }
 
 /** Core fetch wrapper — injects JWT, throws on non-2xx. */
-async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
+type ApiFetchOptions = RequestInit & {
+  timeoutMs?: number;
+};
+
+const DEFAULT_TIMEOUT_MS = 60000;
+
+async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, ...fetchOptions } = options;
   const token = await getToken();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 60000); // 60s timeout
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const res = await fetch(`${API_URL}${path}`, {
-      ...options,
+      ...fetchOptions,
       signal: controller.signal,
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...options?.headers,
+        ...fetchOptions.headers,
       },
     });
 
@@ -55,7 +62,7 @@ async function apiFetch<T>(path: string, options?: RequestInit): Promise<T> {
       "name" in err &&
       err.name === "AbortError"
     ) {
-      throw new Error("Request timed out after 60 seconds. The server might be busy or cold-starting.");
+      throw new Error(`Request timed out after ${Math.round(timeoutMs / 1000)} seconds. The server might be busy or cold-starting.`);
     }
     throw err;
   }
@@ -68,11 +75,13 @@ export const api = {
       apiFetch<{ entry_id: string; amplification_questions: AmplificationQuestion[] }>("/entries", {
         method: "POST",
         body: JSON.stringify(data),
+        timeoutMs: 90000,
       }),
     amplify: (data: { entry_id: string; personal_associations: Record<string, string> }) =>
       apiFetch<Entry>("/entries/amplify", {
         method: "POST",
         body: JSON.stringify(data),
+        timeoutMs: 240000,
       }),
     list: () => apiFetch<Entry[]>("/entries"),
     get: (id: string) => apiFetch<Entry>(`/entries/${id}`),

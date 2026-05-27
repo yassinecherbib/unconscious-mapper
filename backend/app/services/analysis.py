@@ -173,6 +173,7 @@ async def run_extraction(
             response_mime_type="application/json",
             max_output_tokens=1500,
             temperature=0.3,
+            http_options=types.HttpOptions(timeout=220000),
         ),
     )
 

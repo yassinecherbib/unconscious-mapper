@@ -115,6 +115,7 @@ async def run_integration_risk(
                 response_mime_type="application/json",
                 max_output_tokens=800,
                 temperature=0.2,
+                http_options=types.HttpOptions(timeout=90000),
             ),
         )
         if not response.text:
@@ -124,4 +125,3 @@ async def run_integration_risk(
     except Exception as exc:
         print(f"[integration_risk] assessment failed: {exc}")
         return None
-
