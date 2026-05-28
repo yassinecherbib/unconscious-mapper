@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import EntryForm from "@/app/components/EntryForm";
 import EntryCard from "@/app/components/EntryCard";
 import { api, type Entry } from "@/lib/api";
 
 export default function JournalPage() {
+  const router = useRouter();
   const [entries, setEntries]   = useState<Entry[]>([]);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState<string | null>(null);
@@ -60,6 +62,7 @@ export default function JournalPage() {
         </h2>
         <EntryForm onComplete={(entry) => {
           setEntries((prev) => [entry, ...prev]);
+          router.push(`/journal/${entry.id}`);
         }} />
       </section>
 

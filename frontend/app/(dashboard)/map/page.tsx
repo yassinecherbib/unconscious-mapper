@@ -120,6 +120,7 @@ export default function MapPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [showUnattributed, setShowUnattributed] = useState(true);
   const [tooltip, setTooltip] = useState<TooltipState>({ x: 0, y: 0, visible: false, node: null, containerWidth: 320 });
 
   useEffect(() => {
@@ -151,7 +152,16 @@ export default function MapPage() {
         .on("zoom", ({ transform }) => g.attr("transform", transform.toString()))
     );
 
-    const normalizedNodes = graph.nodes.map((node) => ({
+    const hiddenNodeIds = new Set(
+      graph.nodes
+        .filter((node) => (node.type ?? "symbol") === "symbol" && !node.dominant_archetype)
+        .map((node) => node.id)
+    );
+    const visibleGraphNodes = showUnattributed
+      ? graph.nodes
+      : graph.nodes.filter((node) => !hiddenNodeIds.has(node.id));
+
+    const normalizedNodes = visibleGraphNodes.map((node) => ({
       ...node,
       type: node.type ?? "symbol",
       label: nodeLabel(node),
@@ -186,6 +196,10 @@ export default function MapPage() {
 
     const symbolRadius = d3.scaleSqrt().domain([0, maxSymbolValue]).range([8, 28]);
     const archetypeRadius = d3.scaleSqrt().domain([0, maxArchetypeValue]).range([20, 42]);
+    const symbolNodeRadius = (node: SimNode) => {
+      const radius = symbolRadius(node.value);
+      return node.dominant_archetype ? radius : radius * 0.7;
+    };
 
     const sim = d3.forceSimulation<SimNode>(normalizedNodes)
       .force("link",
@@ -207,7 +221,7 @@ export default function MapPage() {
         return hub?.orbitY ? hub.orbitY + 120 : centerY + 40;
       }).strength((node) => node.type === "archetype" ? 0.6 : node.dominant_archetype ? 0.05 : 0.025))
       .force("collision", d3.forceCollide<SimNode>().radius((node) => (
-        node.type === "archetype" ? archetypeRadius(node.value) + 18 : symbolRadius(node.value) + 12
+        node.type === "archetype" ? archetypeRadius(node.value) + 18 : symbolNodeRadius(node) + 10
       )));
 
     simRef.current = sim as d3.Simulation<SimNode, SimEdge>;
@@ -255,7 +269,7 @@ export default function MapPage() {
         const rect = svgRef.current!.getBoundingClientRect();
         d3.select(this).select<SVGCircleElement>("circle.core")
           .transition().duration(140)
-          .attr("r", d.type === "archetype" ? archetypeRadius(d.value) * 1.1 : symbolRadius(d.value) * 1.18);
+          .attr("r", d.type === "archetype" ? archetypeRadius(d.value) * 1.1 : symbolNodeRadius(d) * 1.18);
         setTooltip({
           x: event.clientX - rect.left,
           y: event.clientY - rect.top,
@@ -276,7 +290,7 @@ export default function MapPage() {
       .on("mouseout", function (_event, d) {
         d3.select(this).select<SVGCircleElement>("circle.core")
           .transition().duration(140)
-          .attr("r", d.type === "archetype" ? archetypeRadius(d.value) : symbolRadius(d.value));
+          .attr("r", d.type === "archetype" ? archetypeRadius(d.value) : symbolNodeRadius(d));
         setTooltip((prev) => ({ ...prev, visible: false, node: null }));
       })
       .on("click", (_event, d) => setSelected((prev) => prev === d.id ? null : d.id))
@@ -303,7 +317,7 @@ export default function MapPage() {
     node.filter((d) => !!d.is_bridge)
       .append("circle")
       .attr("class", "bridge-halo")
-      .attr("r", (d) => symbolRadius(d.value) + 8)
+      .attr("r", (d) => symbolNodeRadius(d) + 8)
       .attr("fill", "none")
       .attr("stroke", "#ffffff")
       .attr("stroke-width", 1.5)
@@ -312,7 +326,7 @@ export default function MapPage() {
 
     node.append("circle")
       .attr("class", "core")
-      .attr("r", (d) => d.type === "archetype" ? archetypeRadius(d.value) : symbolRadius(d.value))
+      .attr("r", (d) => d.type === "archetype" ? archetypeRadius(d.value) : symbolNodeRadius(d))
       .attr("fill", (d) => d.type === "archetype" ? archetypeColor(d.label) : archetypeColor(d.dominant_archetype))
       .attr("fill-opacity", (d) => d.type === "archetype" ? 0.22 : 0.88)
       .attr("stroke", (d) => d.type === "archetype" ? archetypeColor(d.label) : archetypeColor(d.dominant_archetype))
@@ -324,7 +338,7 @@ export default function MapPage() {
       .text((d) => d.label ?? d.id)
       .attr("text-anchor", "middle")
       .attr("dy", (d) => d.type === "archetype" ? "0.35em" : "0.34em")
-      .attr("font-size", (d) => d.type === "archetype" ? 12 : Math.min(11, Math.max(8, symbolRadius(d.value) * 0.52)))
+      .attr("font-size", (d) => d.type === "archetype" ? 12 : Math.min(11, Math.max(8, symbolNodeRadius(d) * 0.52)))
       .attr("fill", "#ffffff")
       .attr("fill-opacity", (d) => d.type === "archetype" ? 0.96 : 0.9)
       .attr("pointer-events", "none")
@@ -346,7 +360,7 @@ export default function MapPage() {
 
       node.attr("transform", (d) => `translate(${d.x},${d.y})`);
     });
-  }, [graph]);
+  }, [graph, showUnattributed]);
 
   useEffect(() => {
     buildGraph();
@@ -389,13 +403,21 @@ export default function MapPage() {
       });
   }, [selected]);
 
-  const symbolCount = graph?.nodes.filter((node) => (node.type ?? "symbol") === "symbol").length ?? 0;
+  const totalUnattributed = graph?.nodes.filter((node) => (node.type ?? "symbol") === "symbol" && !node.dominant_archetype).length ?? 0;
+  const symbolCount = graph?.nodes.filter((node) => (node.type ?? "symbol") === "symbol" && (showUnattributed || !!node.dominant_archetype)).length ?? 0;
   const archetypes = graph?.nodes
     .filter((node) => node.type === "archetype")
     .map((node) => node.label ?? node.id.replace(/^archetype:/, "")) ?? [];
   const coEdgeCount = graph?.edges.filter((edge) => (edge.type ?? "cooccurrence") === "cooccurrence").length ?? 0;
   const hasData = symbolCount > 0;
   const selectedNode = graph?.nodes.find((node) => node.id === selected);
+  const toggleUnattributed = () => {
+    const nextShow = !showUnattributed;
+    if (!nextShow && selectedNode && (selectedNode.type ?? "symbol") === "symbol" && !selectedNode.dominant_archetype) {
+      setSelected(null);
+    }
+    setShowUnattributed(nextShow);
+  };
 
   return (
     <div style={{ height: "calc(100vh - 120px)", display: "flex", flexDirection: "column", gap: 16 }}>
@@ -409,20 +431,40 @@ export default function MapPage() {
           </p>
         </div>
 
-        {selected && (
-          <button
-            onClick={() => setSelected(null)}
-            style={{
-              background: "rgba(124,58,237,0.12)",
-              border: "1px solid rgba(124,58,237,0.3)",
-              borderRadius: 8, padding: "6px 14px",
-              color: "#c4b5fd", fontSize: 13, cursor: "pointer",
-              minWidth: 0,
-            }}
-          >
-            Clear selection: <strong>{selectedNode?.label ?? selected.replace(/^archetype:/, "")}</strong>
-          </button>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {totalUnattributed > 0 && (
+            <button
+              onClick={toggleUnattributed}
+              style={{
+                background: showUnattributed ? "rgba(156,163,175,0.12)" : "rgba(53,205,224,0.12)",
+                border: showUnattributed ? "1px solid rgba(156,163,175,0.32)" : "1px solid rgba(53,205,224,0.34)",
+                borderRadius: 8,
+                padding: "6px 12px",
+                color: showUnattributed ? "#d1d5db" : "#9eeaf2",
+                fontSize: 13,
+                cursor: "pointer",
+                minWidth: 0,
+              }}
+            >
+              {showUnattributed ? "Hide" : "Show"} unattributed ({totalUnattributed})
+            </button>
+          )}
+
+          {selected && (
+            <button
+              onClick={() => setSelected(null)}
+              style={{
+                background: "rgba(124,58,237,0.12)",
+                border: "1px solid rgba(124,58,237,0.3)",
+                borderRadius: 8, padding: "6px 14px",
+                color: "#c4b5fd", fontSize: 13, cursor: "pointer",
+                minWidth: 0,
+              }}
+            >
+              Clear selection: <strong>{selectedNode?.label ?? selected.replace(/^archetype:/, "")}</strong>
+            </button>
+          )}
+        </div>
       </div>
 
       <div
